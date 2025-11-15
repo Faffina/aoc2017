@@ -1,5 +1,5 @@
 mod day8;
 
 fn main() {
-    day8::first();
+    day8::second();
 }
