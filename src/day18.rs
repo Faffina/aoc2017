@@ -1,21 +1,16 @@
-use std::{
-    fs::read_to_string,
-    sync::mpsc::{self, Receiver, Sender, TryRecvError},
-    thread,
-};
+use std::{collections::VecDeque, fs::read_to_string};
 
 pub fn first() {
-    let (main_tx, p_rx) = mpsc::channel::<i64>();
-    let (p_tx, main_rx) = mpsc::channel::<i64>();
-    let mut p = Computer::new(p_tx, p_rx);
-    let pc_handle = thread::spawn(move || p.run());
-    while !pc_handle.is_finished() {
-        match main_rx.try_recv() {
-            Ok(value) => {
-                main_tx.send(value).unwrap();
-            },
-            Err(TryRecvError::Empty) => continue,
-            Err(TryRecvError::Disconnected) => break,
+    let mut p0 = Computer::new(0);
+    let mut p1 = Computer::new(1);
+    
+    loop {
+        p0.run(&mut p1.data_in);
+        p1.run(&mut p0.data_in);
+
+        if p0.halt && p1.halt {
+            println!("{}", p1.send);
+            break;
         }
     }
 }
@@ -41,8 +36,9 @@ struct Computer {
     pc: i64,
     registers: [i64; 26],
     program: Vec<Instruction>,
-    tx: Sender<i64>,
-    rx: Receiver<i64>,
+    data_in: VecDeque<i64>,
+    halt: bool,
+    send: i64,
 }
 
 impl Operand {
@@ -72,32 +68,41 @@ impl Computer {
         }
     }
 
-    fn run(&mut self) {
-        while self.pc >= 0 && self.pc < self.program.len() as i64 {
+    fn run(&mut self, data_out: &mut VecDeque<i64>) {
+        if self.pc >= 0 && self.pc < self.program.len() as i64 {
             let cmd = self.program[self.pc as usize];
             match cmd {
-                Instruction::Send(op) => self.tx.send(self.value(op)).unwrap(),
+                Instruction::Send(op) => {
+                    data_out.push_back(self.value(op));
+                    self.send += 1;
+                }
                 Instruction::Set(a, b) => *self.get_register(a) = self.value(b),
                 Instruction::Add(a, b) => *self.get_register(a) += self.value(b),
                 Instruction::Mul(a, b) => *self.get_register(a) *= self.value(b),
                 Instruction::Mod(a, b) => *self.get_register(a) %= self.value(b),
                 Instruction::Recover(a) => {
-                    *self.get_register(a) = self.rx.try_iter().last().unwrap();
-                    println!("{}", self.value(a));
-                    return;
+                    if let Some(value) = self.data_in.pop_front() {
+                        *self.get_register(a) = value;
+                        self.halt = false;
+                    } else {
+                        self.halt = true;
+                        return;
+                    }
                 }
                 Instruction::JumpGraterZero(a, b) => {
                     if self.value(a) > 0 {
                         self.pc += self.value(b);
-                        continue;
+                        return;
                     }
                 }
             }
             self.pc += 1;
+        } else {
+            self.halt = true;
         }
     }
 
-    fn new(tx: Sender<i64>, rx: Receiver<i64>) -> Computer {
+    fn new(id: i64) -> Computer {
         let v: Vec<Instruction> = read_to_string("data/18")
             .unwrap()
             .lines()
@@ -126,12 +131,15 @@ impl Computer {
                 }
             })
             .collect();
-        Computer {
+        let mut pc = Computer {
             pc: 0,
             registers: [0i64; 26],
-            rx,
-            tx,
+            data_in: VecDeque::new(),
             program: v,
-        }
+            halt: false,
+            send: 0,
+        };
+        *pc.get_register(Operand::new("p")) = id;
+        pc
     }
 }
