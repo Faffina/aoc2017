@@ -1,4 +1,12 @@
-pub fn first() {}
+pub fn first() {
+    let mut turing_machine: Turing<400_000> = Turing::new();
+
+    for _ in 0..12386363{
+        turing_machine.step();
+    }
+
+    println!("number of ones: {}", turing_machine.ones());
+}
 
 enum State {
     A,
@@ -47,6 +55,10 @@ impl<const TAPE_SIZE: usize> Turing<TAPE_SIZE> {
         let bit = self.positon % 64;
         (self.tape[word] & (1u64 << bit)) > 0
     }
+        
+    fn ones(&self) -> usize {
+        self.tape.iter().map(|x| x.count_ones() as usize).sum()
+    }
 
     fn step(&mut self) {
         match self.state {
@@ -66,23 +78,23 @@ impl<const TAPE_SIZE: usize> Turing<TAPE_SIZE> {
                 if self.is_set() {
                     self.clear();
                     self.positon += 1;
-                    self.state = State::E;
+                    self.state = State::A;
                 } else {
                     self.set();
-                    self.positon += 1;
-                    self.state = State::B;
+                    self.positon -= 1;
+                    self.state = State::C;
                 }
             }
 
             State::C => {
                 if self.is_set() {
                     self.clear();
-                    self.positon -= 1;
-                    self.state = State::E;
+                    self.positon += 1;
+                    self.state = State::C;
                 } else {
                     self.set();
-                    self.positon += 1;
-                    self.state = State::B;
+                    self.positon -= 1;
+                    self.state = State::D;
                 }
             }
 
@@ -90,35 +102,35 @@ impl<const TAPE_SIZE: usize> Turing<TAPE_SIZE> {
                 if self.is_set() {
                     self.clear();
                     self.positon -= 1;
-                    self.state = State::E;
+                    self.state = State::F;
                 } else {
                     self.set();
-                    self.positon += 1;
-                    self.state = State::B;
+                    self.positon -= 1;
+                    self.state = State::E;
                 }
             }
 
             State::E => {
                 if self.is_set() {
-                    self.clear();
+                    self.set();
                     self.positon -= 1;
-                    self.state = State::E;
+                    self.state = State::C;
                 } else {
                     self.set();
-                    self.positon += 1;
-                    self.state = State::B;
+                    self.positon -= 1;
+                    self.state = State::A;
                 }
             }
 
             State::F => {
                 if self.is_set() {
-                    self.clear();
-                    self.positon -= 1;
-                    self.state = State::E;
-                } else {
                     self.set();
                     self.positon += 1;
-                    self.state = State::B;
+                    self.state = State::A;
+                } else {
+                    self.set();
+                    self.positon -= 1;
+                    self.state = State::E
                 }
             }
         }
